@@ -1,0 +1,8 @@
+numpy
+pandas
+statsmodels
+scikit-learn
+ib_insync
+scipy
+sqlalchemy
+yfinance
