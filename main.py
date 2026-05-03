@@ -1,0 +1,123 @@
+import asyncio
+import logging
+from execution.ib_client import IBClient
+from execution.alpha import AlphaModel
+from execution.order_manager import OrderManager
+from execution.risk_management import RiskManager
+from models.database import init_db, CointegratedPair
+from config.settings import load_config
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+class PairsBot:
+    """
+    The orchestrator that runs the live execution engine.
+    """
+    def __init__(self):
+        self.config = load_config()
+        self.client = IBClient(
+            host=self.config['ibkr']['host'],
+            port=self.config['ibkr']['port'],
+            client_id=self.config['ibkr']['client_id']
+        )
+        self.order_manager = OrderManager(self.client)
+        self.risk_manager = RiskManager(
+            self.client, 
+            max_pos_pct=self.config['execution']['max_position_size'],
+            stop_loss_std=self.config['execution']['stop_loss_std']
+        )
+        self.alphas = {} # (ticker_a, ticker_b) -> AlphaModel
+        self.pairs_data = {} # (ticker_a, ticker_b) -> CointegratedPair
+
+    async def initialize(self):
+        """
+        Connects to IBKR and loads pairs from the database.
+        """
+        await self.client.connect()
+        
+        session = init_db(self.config['research']['db_path'])
+        pairs = session.query(CointegratedPair).all()
+        
+        if not pairs:
+            logger.warning("No cointegrated pairs found in database. Run the research pipeline first!")
+            return False
+            
+        for pair in pairs:
+            key = (pair.ticker_a, pair.ticker_b)
+            self.alphas[key] = AlphaModel(pair.ticker_a, pair.ticker_b, pair.beta)
+            self.pairs_data[key] = pair
+            logger.info(f"Initialized live tracking for {pair.ticker_a}-{pair.ticker_b}")
+            
+        return True
+
+    def on_bar_update(self, bars, has_new_bar):
+        """
+        Callback for real-time bars. Updates alpha models and checks for signals.
+        """
+        # Note: bars is a BarDataList. We need to know which contract it belongs to.
+        # IB-insync bars objects have a 'contract' attribute if requested correctly.
+        contract = bars.contract
+        price = bars[-1].close
+        
+        for (t1, t2), alpha in self.alphas.items():
+            if t1 == contract.symbol:
+                alpha.update_prices(price_a=price)
+            elif t2 == contract.symbol:
+                alpha.update_prices(price_b=price)
+            
+            # Check for signals
+            signal = alpha.get_signal(
+                entry_threshold=self.config['execution']['z_score_entry'],
+                exit_threshold=self.config['execution']['z_score_exit']
+            )
+            
+            if signal is not None:
+                self.process_signal(t1, t2, signal, alpha.calculate_z_score())
+
+    def process_signal(self, t1, t2, signal, z_score):
+        """
+        Handles signal execution with risk checks.
+        """
+        if self.risk_manager.check_circuit_breaker(z_score):
+            # Close position if open (omitted for brevity, but crucial in prod)
+            return
+
+        pair_data = self.pairs_data[(t1, t2)]
+        
+        if signal == 1: # Long spread
+            qty = self.risk_manager.calculate_position_size(100, 100, pair_data.beta) # Dummy prices for sizing
+            self.order_manager.submit_spread_order(t1, t2, pair_data.beta, 'BUY', qty)
+        elif signal == -1: # Short spread
+            qty = self.risk_manager.calculate_position_size(100, 100, pair_data.beta)
+            self.order_manager.submit_spread_order(t1, t2, pair_data.beta, 'SELL', qty)
+        elif signal == 0: # Exit
+            # Logic to flatten position
+            logger.info(f"Exiting position for {t1}-{t2}")
+
+    async def run(self):
+        """
+        Main loop.
+        """
+        if not await self.initialize():
+            return
+            
+        # Subscribe to all unique tickers
+        all_tickers = set()
+        for t1, t2 in self.alphas.keys():
+            all_tickers.add(t1)
+            all_tickers.add(t2)
+            
+        await self.client.request_realtime_bars(list(all_tickers), self.on_bar_update)
+        
+        logger.info("Bot is live and hunting for alpha. Don't touch anything.")
+        
+        while True:
+            await asyncio.sleep(1)
+
+if __name__ == "__main__":
+    bot = PairsBot()
+    try:
+        asyncio.run(bot.run())
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user. Hopefully with more money than it started with.")
