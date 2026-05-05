@@ -52,7 +52,13 @@ def run_research_pipeline():
         for i in range(len(members)):
             for j in range(i + 1, len(members)):
                 t1, t2 = members[i], members[j]
-                res = analyzer.analyze_pair(data[t1], data[t2])
+                res = analyzer.analyze_pair(
+                    data[t1], 
+                    data[t2],
+                    p_value_threshold=res_conf.get('p_value_max', 0.02),
+                    hurst_threshold=res_conf.get('hurst_max', 0.45),
+                    half_life_max=res_conf.get('half_life_max', 20)
+                )
                 
                 if res:
                     logger.info(f"Found cointegrated pair: {t1} - {t2} (p-value: {res['p_value']:.4f})")

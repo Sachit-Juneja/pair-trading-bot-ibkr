@@ -82,22 +82,21 @@ class CointegrationAnalyzer:
         half_life = np.log(2) / lambda_val
         return half_life
 
-    def analyze_pair(self, p1, p2):
+    def analyze_pair(self, p1, p2, p_value_threshold=0.02, hurst_threshold=0.45, half_life_max=20):
         """
         Full suite of tests for a potential pair.
         """
         coint_res = self.test_cointegration(p1, p2)
         
-        # If not cointegrated (p > 0.05), don't waste more CPU cycles
-        if coint_res['p_value'] > 0.05:
-            logger.debug(f"Rejected: Cointegration p-value {coint_res['p_value']:.4f}")
+        # If not cointegrated, don't waste more CPU cycles
+        if coint_res['p_value'] > p_value_threshold:
             return None
             
         hurst = self.calculate_hurst(coint_res['residuals'])
         half_life = self.calculate_half_life(coint_res['residuals'])
         
-        # Filter: Mean reverting (H < 0.5) and reasonable half-life (e.g. < 50 days)
-        if hurst < 0.5 and 1 < half_life < 50:
+        # Filter: Mean reverting and reasonable half-life
+        if hurst < hurst_threshold and 1 < half_life < half_life_max:
             return {
                 'beta': coint_res['beta'],
                 'alpha': coint_res['alpha'],
@@ -107,5 +106,4 @@ class CointegrationAnalyzer:
                 'half_life': half_life
             }
         
-        logger.debug(f"Rejected: Hurst {hurst:.4f}, Half-Life {half_life:.2f}")
         return None
