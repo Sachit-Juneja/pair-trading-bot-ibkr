@@ -27,18 +27,24 @@ class UniverseSelector:
     @staticmethod
     def get_sp500_tickers():
         """
-        Scrapes the S&P 500 list from Wikipedia. Adding a User-Agent because 
-        Wikipedia (rightfully) hates robots that don't say hi.
+        Scrapes the S&P 500 list from Wikipedia.
         """
         logger.info("Fetching S&P 500 tickers from Wikipedia...")
         try:
             import requests
             url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-            response = requests.get(url, headers=headers)
-            table = pd.read_html(response.text)
-            df = table[0]
-            return df['Symbol'].tolist()
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            # Use a more specific search for the table
+            tables = pd.read_html(response.text)
+            for df in tables:
+                if 'Symbol' in df.columns:
+                    tickers = df['Symbol'].tolist()
+                    # Some tickers use '.' instead of '-' (e.g. BRK.B), yfinance likes '-'
+                    return [t.replace('.', '-') for t in tickers]
+            
+            raise ValueError("No table with 'Symbol' column found.")
         except Exception as e:
             logger.error(f"Failed to fetch S&P 500 list: {e}")
             return []
