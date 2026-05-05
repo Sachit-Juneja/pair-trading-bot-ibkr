@@ -55,6 +55,8 @@ class CointegrationAnalyzer:
         """
         lags = range(2, 20)
         tau = [np.sqrt(np.std(np.subtract(ts[lag:], ts[:-lag]))) for lag in lags]
+        # Avoid log(0)
+        tau = [t if t > 0 else 1e-9 for t in tau]
         poly = np.polyfit(np.log(lags), np.log(tau), 1)
         return poly[0] * 2.0
 
@@ -88,13 +90,14 @@ class CointegrationAnalyzer:
         
         # If not cointegrated (p > 0.05), don't waste more CPU cycles
         if coint_res['p_value'] > 0.05:
+            logger.debug(f"Rejected: Cointegration p-value {coint_res['p_value']:.4f}")
             return None
             
         hurst = self.calculate_hurst(coint_res['residuals'])
         half_life = self.calculate_half_life(coint_res['residuals'])
         
-        # Filter: Mean reverting (H < 0.5) and reasonable half-life (e.g. < 25 days)
-        if hurst < 0.5 and 1 < half_life < 25:
+        # Filter: Mean reverting (H < 0.5) and reasonable half-life (e.g. < 50 days)
+        if hurst < 0.5 and 1 < half_life < 50:
             return {
                 'beta': coint_res['beta'],
                 'alpha': coint_res['alpha'],
@@ -103,4 +106,6 @@ class CointegrationAnalyzer:
                 'hurst': hurst,
                 'half_life': half_life
             }
+        
+        logger.debug(f"Rejected: Hurst {hurst:.4f}, Half-Life {half_life:.2f}")
         return None

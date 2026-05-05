@@ -10,6 +10,6 @@ ibkr:
 research:
   universe: 'SP500'
   start_date: '2022-01-01'
-  pca_components: 10
-  dbscan_eps: 1.5
+  pca_components: 5
+  dbscan_eps: 2.5
   db_path: 'sqlite:///pairs_trading.db'
