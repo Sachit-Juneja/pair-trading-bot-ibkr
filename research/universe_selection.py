@@ -38,15 +38,25 @@ class UniverseSelector:
             response = requests.get(url, headers=headers, timeout=10)
             
             soup = BeautifulSoup(response.text, 'html.parser')
-            table = soup.find('table', {'id': 'constituents'})
+            # Look for the table with wikitable class, which is standard for S&P 500 page
+            table = soup.find('table', {'class': 'wikitable'})
             
             if table:
-                df = pd.read_html(str(table))[0]
-                tickers = df['Symbol'].tolist()
-                # Clean up tickers for yfinance
-                return [t.replace('.', '-') for t in tickers]
+                tickers = []
+                for row in table.find_all('tr')[1:]:  # Skip header
+                    cols = row.find_all('td')
+                    if cols:
+                        # The ticker is usually in the first column
+                        ticker = cols[0].text.strip()
+                        # Clean up and handle Wikipedia's specific ticker format
+                        ticker = ticker.replace('.', '-')
+                        tickers.append(ticker)
+                
+                if tickers:
+                    logger.info(f"Successfully scraped {len(tickers)} tickers.")
+                    return tickers
             
-            raise ValueError("Could not find table with id 'constituents'.")
+            raise ValueError("Could not find the S&P 500 table on the page.")
         except Exception as e:
             logger.error(f"Failed to fetch S&P 500 list: {e}")
             return []
