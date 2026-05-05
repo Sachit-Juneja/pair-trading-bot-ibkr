@@ -1,4 +1,12 @@
 import asyncio
+import sys
+
+# Python 3.14+ fix: Ensure an event loop exists before importing ib_insync/eventkit
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    asyncio.set_event_loop(asyncio.new_event_loop())
+
 import logging
 from execution.ib_client import IBClient
 from execution.alpha import AlphaModel
