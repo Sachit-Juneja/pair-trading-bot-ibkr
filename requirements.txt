@@ -6,3 +6,4 @@ ib_insync
 scipy
 sqlalchemy
 yfinance
+PyYAML
