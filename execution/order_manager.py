@@ -12,18 +12,15 @@ class OrderManager:
         self.ib_client = ib_client
         self.open_trades = {} # ticker_pair -> trade_object
 
-    def create_spread_contract(self, ticker_a, ticker_b, ratio):
+    async def create_spread_contract(self, ticker_a, ticker_b, ratio):
         """
         Creates a 'Bag' contract for the spread.
-        Note: IBKR ratio must be an integer usually for combos, 
-        so we might need to scale up (e.g. 100:beta*100).
-        For simplicity, we'll assume a 1:beta ratio if possible or use the nearest integers.
         """
         contract_a = self.ib_client.get_contract(ticker_a)
         contract_b = self.ib_client.get_contract(ticker_b)
         
         # Qualify them to get conId
-        self.ib_client.ib.qualifyContracts(contract_a, contract_b)
+        await self.ib_client.ib.qualifyContractsAsync(contract_a, contract_b)
         
         bag = Bag()
         bag.symbol = f"{ticker_a}.{ticker_b}"
@@ -50,7 +47,7 @@ class OrderManager:
         bag.comboLegs = [leg1, leg2]
         return bag
 
-    def submit_spread_order(self, ticker_a, ticker_b, ratio, action, quantity):
+    async def submit_spread_order(self, ticker_a, ticker_b, ratio, action, quantity):
         """
         action: 'BUY' (Long spread) or 'SELL' (Short spread)
         """
@@ -59,7 +56,7 @@ class OrderManager:
             logger.warning(f"Trade already in progress for {pair_key}. Skipping.")
             return
 
-        bag = self.create_spread_contract(ticker_a, ticker_b, ratio)
+        bag = await self.create_spread_contract(ticker_a, ticker_b, ratio)
         order = MarketOrder(action, quantity)
         
         trade = self.ib_client.ib.placeOrder(bag, order)

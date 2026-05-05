@@ -39,8 +39,10 @@ class IBClient:
         Streams 1-minute bars. High frequency enough to feel fast, slow enough for Python.
         """
         contracts = [self.get_contract(s) for s in symbols]
+        # Qualify all at once to save round trips
+        await self.ib.qualifyContractsAsync(*contracts)
+        
         for contract in contracts:
-            self.ib.qualifyContracts(contract)
             bars = self.ib.reqRealTimeBars(contract, 5, 'MIDPOINT', False)
             bars.updateEvent += callback
             logger.info(f"Subscribed to realtime bars for {contract.symbol}")

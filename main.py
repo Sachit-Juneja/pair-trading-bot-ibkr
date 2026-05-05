@@ -59,12 +59,14 @@ class PairsBot:
             
         return True
 
-    def on_bar_update(self, bars, has_new_bar):
+    async def on_bar_update(self, bars, has_new_bar):
         """
         Callback for real-time bars. Updates alpha models and checks for signals.
         """
+        if not has_new_bar:
+            return
+            
         # Note: bars is a BarDataList. We need to know which contract it belongs to.
-        # IB-insync bars objects have a 'contract' attribute if requested correctly.
         contract = bars.contract
         price = bars[-1].close
         
@@ -81,46 +83,44 @@ class PairsBot:
             )
             
             if signal is not None:
-                self.process_signal(t1, t2, signal, alpha.calculate_z_score())
+                await self.process_signal(t1, t2, signal, alpha.calculate_z_score())
 
-    def process_signal(self, t1, t2, signal, z_score):
+    async def process_signal(self, t1, t2, signal, z_score):
         """
         Handles signal execution with risk checks.
         """
         if self.risk_manager.check_circuit_breaker(z_score):
-            # Close position if open (omitted for brevity, but crucial in prod)
             return
 
         pair_data = self.pairs_data[(t1, t2)]
         
+        # Calculate quantity based on nominal value or standard risk
+        # For demo, we'll use a fixed quantity of 100 shares for Leg A
+        qty = 100
+        
         if signal == 1: # Long spread
-            qty = self.risk_manager.calculate_position_size(100, 100, pair_data.beta) # Dummy prices for sizing
-            self.order_manager.submit_spread_order(t1, t2, pair_data.beta, 'BUY', qty)
+            await self.order_manager.submit_spread_order(t1, t2, pair_data.beta, 'BUY', qty)
         elif signal == -1: # Short spread
-            qty = self.risk_manager.calculate_position_size(100, 100, pair_data.beta)
-            self.order_manager.submit_spread_order(t1, t2, pair_data.beta, 'SELL', qty)
+            await self.order_manager.submit_spread_order(t1, t2, pair_data.beta, 'SELL', qty)
         elif signal == 0: # Exit
-            # Logic to flatten position
-            logger.info(f"Exiting position for {t1}-{t2}")
+            logger.info(f"Signal to exit position for {t1}-{t2}")
 
     async def background_research_task(self):
         """
         Runs the research pipeline every 7 days. 
-        Because the market changes and our pairs will eventually stop loving each other.
         """
         from research.pipeline import run_research_pipeline
         while True:
+            # Wait 7 days first. We already ran research to get started.
+            await asyncio.sleep(60 * 60 * 24 * 7)
+            
             logger.info("Starting scheduled background research pipeline...")
             try:
-                # Run research in a thread so it doesn't block the event loop
                 await asyncio.to_thread(run_research_pipeline)
                 logger.info("Background research pipeline complete. Refreshing pairs...")
                 await self.initialize() # Reload pairs into the bot
             except Exception as e:
                 logger.error(f"Scheduled research failed: {e}")
-            
-            # Wait 7 days (60*60*24*7 seconds)
-            await asyncio.sleep(60 * 60 * 24 * 7)
 
     async def run(self):
         """
