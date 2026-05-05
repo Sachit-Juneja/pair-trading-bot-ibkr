@@ -74,21 +74,26 @@ class UniverseSelector:
                 raw_batch = yf.download(batch, start=self.start_date, end=self.end_date, progress=False)
                 
                 if raw_batch.empty:
+                    logger.warning(f"Batch {i//batch_size + 1} returned no data.")
                     continue
 
-                # If only one ticker was requested, it might not be a MultiIndex
-                if len(batch) == 1:
-                    if 'Adj Close' in raw_batch.columns:
-                        s = raw_batch['Adj Close']
+                # MultiIndex: (Attribute, Ticker) or SingleIndex: Attribute
+                # yfinance returns Adj Close if available, else Close
+                price_data = raw_batch.get('Adj Close')
+                if price_data is None:
+                    price_data = raw_batch.get('Close')
+                
+                if price_data is not None:
+                    if len(batch) == 1:
+                        # Single ticker results are Series or DataFrame with single column
+                        s = price_data.copy()
                         s.name = batch[0]
                         all_data.append(s)
-                else:
-                    # MultiIndex: ('Adj Close', 'Ticker')
-                    if 'Adj Close' in raw_batch.columns:
-                        adj_close = raw_batch['Adj Close']
+                    else:
+                        # Multi-ticker results are DataFrame with tickers as columns
                         for ticker in batch:
-                            if ticker in adj_close.columns:
-                                s = adj_close[ticker]
+                            if ticker in price_data.columns:
+                                s = price_data[ticker].copy()
                                 all_data.append(s)
             
             if not all_data:
