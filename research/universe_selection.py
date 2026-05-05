@@ -71,20 +71,28 @@ class UniverseSelector:
             for i in range(0, len(self.tickers), batch_size):
                 batch = self.tickers[i:i+batch_size]
                 logger.debug(f"Downloading batch {i//batch_size + 1}...")
-                raw_batch = yf.download(batch, start=self.start_date, end=self.end_date, progress=False, group_by='ticker')
+                raw_batch = yf.download(batch, start=self.start_date, end=self.end_date, progress=False)
                 
-                # Extract 'Adj Close' for each ticker in the batch
-                for ticker in batch:
-                    try:
-                        if ticker in raw_batch.columns.levels[0]:
-                            ticker_data = raw_batch[ticker]['Adj Close']
-                            ticker_data.name = ticker
-                            all_data.append(ticker_data)
-                    except:
-                        continue
+                if raw_batch.empty:
+                    continue
+
+                # If only one ticker was requested, it might not be a MultiIndex
+                if len(batch) == 1:
+                    if 'Adj Close' in raw_batch.columns:
+                        s = raw_batch['Adj Close']
+                        s.name = batch[0]
+                        all_data.append(s)
+                else:
+                    # MultiIndex: ('Adj Close', 'Ticker')
+                    if 'Adj Close' in raw_batch.columns:
+                        adj_close = raw_batch['Adj Close']
+                        for ticker in batch:
+                            if ticker in adj_close.columns:
+                                s = adj_close[ticker]
+                                all_data.append(s)
             
             if not all_data:
-                raise ValueError("No data could be fetched for any tickers.")
+                raise ValueError("No data could be fetched for any tickers. Yahoo might be rate-limiting you or your internet is ghosting you.")
 
             self.data = pd.concat(all_data, axis=1)
             
