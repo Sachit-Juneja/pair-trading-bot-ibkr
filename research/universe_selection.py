@@ -27,11 +27,16 @@ class UniverseSelector:
     @staticmethod
     def get_sp500_tickers():
         """
-        Scrapes the S&P 500 list from Wikipedia because we're too cheap for a Bloomberg Terminal.
+        Scrapes the S&P 500 list from Wikipedia. Adding a User-Agent because 
+        Wikipedia (rightfully) hates robots that don't say hi.
         """
         logger.info("Fetching S&P 500 tickers from Wikipedia...")
         try:
-            table = pd.read_html('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')
+            import requests
+            url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+            response = requests.get(url, headers=headers)
+            table = pd.read_html(response.text)
             df = table[0]
             return df['Symbol'].tolist()
         except Exception as e:
@@ -90,7 +95,14 @@ class UniverseSelector:
         scaler = StandardScaler()
         scaled_returns = scaler.fit_transform(self.returns.T) # We want to cluster tickers, so transpose
 
-        pca = PCA(n_components=n_components)
+        # PCA components cannot exceed min(n_samples, n_features)
+        # n_features = returns.shape[1] (tickers), n_samples = returns.shape[0] (days)
+        # scaled_returns.shape is (tickers, days)
+        max_components = min(scaled_returns.shape[0], scaled_returns.shape[1])
+        actual_n = min(n_components, max_components)
+        
+        logger.info(f"Applying PCA with {actual_n} components (requested {n_components})...")
+        pca = PCA(n_components=actual_n)
         pca_features = pca.fit_transform(scaled_returns)
         
         logger.info(f"PCA complete. Explained variance ratio sum: {np.sum(pca.explained_variance_ratio_):.4f}")

@@ -8,3 +8,4 @@ sqlalchemy
 yfinance
 PyYAML
 lxml
+requests

@@ -95,12 +95,34 @@ class PairsBot:
             # Logic to flatten position
             logger.info(f"Exiting position for {t1}-{t2}")
 
+    async def background_research_task(self):
+        """
+        Runs the research pipeline every 7 days. 
+        Because the market changes and our pairs will eventually stop loving each other.
+        """
+        from research.pipeline import run_research_pipeline
+        while True:
+            logger.info("Starting scheduled background research pipeline...")
+            try:
+                # Run research in a thread so it doesn't block the event loop
+                await asyncio.to_thread(run_research_pipeline)
+                logger.info("Background research pipeline complete. Refreshing pairs...")
+                await self.initialize() # Reload pairs into the bot
+            except Exception as e:
+                logger.error(f"Scheduled research failed: {e}")
+            
+            # Wait 7 days (60*60*24*7 seconds)
+            await asyncio.sleep(60 * 60 * 24 * 7)
+
     async def run(self):
         """
         Main loop.
         """
         if not await self.initialize():
             return
+            
+        # Start background research task
+        asyncio.create_task(self.background_research_task())
             
         # Subscribe to all unique tickers
         all_tickers = set()
@@ -110,7 +132,7 @@ class PairsBot:
             
         await self.client.request_realtime_bars(list(all_tickers), self.on_bar_update)
         
-        logger.info("Bot is live and hunting for alpha. Don't touch anything.")
+        logger.info("Bot is live and hunting for alpha. Scheduled research is active.")
         
         while True:
             await asyncio.sleep(1)
