@@ -61,31 +61,40 @@ class UniverseSelector:
             logger.error(f"Failed to fetch S&P 500 list: {e}")
             return []
 
-    def fetch_data(self):
+    def fetch_data(self, batch_size=50):
         """
-        Downloads historical data. If the internet is slow, go grab a coffee.
+        Downloads historical data in batches because Yahoo Finance is flaky with large lists.
         """
         logger.info(f"Fetching data for {len(self.tickers)} tickers from {self.start_date} to {self.end_date}...")
         try:
-            # Fetch prices. Using auto_adjust=True often simplifies things.
-            raw_data = yf.download(self.tickers, start=self.start_date, end=self.end_date, progress=False)
+            all_data = []
+            for i in range(0, len(self.tickers), batch_size):
+                batch = self.tickers[i:i+batch_size]
+                logger.debug(f"Downloading batch {i//batch_size + 1}...")
+                raw_batch = yf.download(batch, start=self.start_date, end=self.end_date, progress=False, group_by='ticker')
+                
+                # Extract 'Adj Close' for each ticker in the batch
+                for ticker in batch:
+                    try:
+                        if ticker in raw_batch.columns.levels[0]:
+                            ticker_data = raw_batch[ticker]['Adj Close']
+                            ticker_data.name = ticker
+                            all_data.append(ticker_data)
+                    except:
+                        continue
             
-            # yfinance column structure can be annoying. Let's try to find 'Adj Close' or 'Close'.
-            if 'Adj Close' in raw_data.columns:
-                self.data = raw_data['Adj Close']
-            elif 'Close' in raw_data.columns:
-                self.data = raw_data['Close']
-            else:
-                # If it's a single ticker, it might not be a MultiIndex
-                if isinstance(raw_data, pd.DataFrame):
-                    self.data = raw_data
-                else:
-                    raise ValueError("Could not find price data in yfinance response.")
+            if not all_data:
+                raise ValueError("No data could be fetched for any tickers.")
+
+            self.data = pd.concat(all_data, axis=1)
             
             # Drop columns with too many missing values
-            self.data = self.data.dropna(axis=1, thresh=int(len(raw_data) * 0.9))
+            self.data = self.data.dropna(axis=1, thresh=int(len(self.data) * 0.9))
             self.data = self.data.ffill().dropna()
             
+            if self.data.empty:
+                raise ValueError("Dataset is empty after cleaning.")
+
             logger.info(f"Successfully fetched data for {self.data.shape[1]} tickers.")
             return self.data
         except Exception as e:
@@ -108,6 +117,10 @@ class UniverseSelector:
         """
         if self.returns is None:
             self.calculate_returns()
+            
+        if self.returns.empty:
+            logger.error("Returns are empty. PCA skipped.")
+            return np.array([]), None
 
         # Scale the data because PCA is sensitive to variance
         scaler = StandardScaler()
@@ -132,6 +145,11 @@ class UniverseSelector:
         """
         features, _ = self.apply_pca(n_components=n_components)
         
+        if features.size == 0:
+            logger.error("No features for clustering.")
+            self.clusters = pd.Series([], dtype=int)
+            return self.clusters
+
         # DBSCAN doesn't require a pre-defined number of clusters. It finds them itself.
         clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(features)
         self.clusters = pd.Series(clustering.labels_, index=self.data.columns)
