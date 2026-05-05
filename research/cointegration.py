@@ -30,8 +30,8 @@ class CointegrationAnalyzer:
         """
         X = sm.add_constant(p2)
         model = sm.OLS(p1, X).fit()
-        beta = model.params[1]
-        alpha = model.params[0]
+        beta = model.params.iloc[1]
+        alpha = model.params.iloc[0]
         residuals = model.resid
         
         # ADF Test
@@ -72,7 +72,7 @@ class CointegrationAnalyzer:
         # Regress delta_y on y_lag
         X = sm.add_constant(ts_lag)
         model = sm.OLS(ts_diff, X).fit()
-        lambda_val = -model.params[1] # Speed of reversion
+        lambda_val = -model.params.iloc[1] # Speed of reversion
         
         if lambda_val <= 0:
             return np.inf # Not mean reverting
