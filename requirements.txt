@@ -9,3 +9,4 @@ yfinance
 PyYAML
 lxml
 requests
+beautifulsoup4

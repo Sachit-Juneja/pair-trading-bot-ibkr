@@ -32,19 +32,21 @@ class UniverseSelector:
         logger.info("Fetching S&P 500 tickers from Wikipedia...")
         try:
             import requests
+            from bs4 import BeautifulSoup
             url = 'https://en.wikipedia.org/wiki/List_of_S%26P_500_companies'
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
             response = requests.get(url, headers=headers, timeout=10)
             
-            # Use a more specific search for the table
-            tables = pd.read_html(response.text)
-            for df in tables:
-                if 'Symbol' in df.columns:
-                    tickers = df['Symbol'].tolist()
-                    # Some tickers use '.' instead of '-' (e.g. BRK.B), yfinance likes '-'
-                    return [t.replace('.', '-') for t in tickers]
+            soup = BeautifulSoup(response.text, 'html.parser')
+            table = soup.find('table', {'id': 'constituents'})
             
-            raise ValueError("No table with 'Symbol' column found.")
+            if table:
+                df = pd.read_html(str(table))[0]
+                tickers = df['Symbol'].tolist()
+                # Clean up tickers for yfinance
+                return [t.replace('.', '-') for t in tickers]
+            
+            raise ValueError("Could not find table with id 'constituents'.")
         except Exception as e:
             logger.error(f"Failed to fetch S&P 500 list: {e}")
             return []
