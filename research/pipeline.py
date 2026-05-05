@@ -17,8 +17,15 @@ def run_research_pipeline():
     res_conf = config['research']
     
     # 1. Universe Selection
+    tickers = res_conf['universe']
+    if tickers == 'SP500':
+        tickers = UniverseSelector.get_sp500_tickers()
+        if not tickers:
+            logger.error("Could not fetch S&P 500 tickers. Reverting to defaults.")
+            tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META']
+
     selector = UniverseSelector(
-        res_conf['universe'], 
+        tickers, 
         res_conf['start_date'], 
         datetime.date.today().strftime('%Y-%m-%d')
     )

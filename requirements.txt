@@ -7,3 +7,4 @@ scipy
 sqlalchemy
 yfinance
 PyYAML
+lxml

@@ -24,17 +24,43 @@ class UniverseSelector:
         self.returns = None
         self.clusters = None
 
+    @staticmethod
+    def get_sp500_tickers():
+        """
+        Scrapes the S&P 500 list from Wikipedia because we're too cheap for a Bloomberg Terminal.
+        """
+        logger.info("Fetching S&P 500 tickers from Wikipedia...")
+        try:
+            table = pd.read_html('https://en.wikipedia.org/wiki/List_of_S%26P_500_companies')
+            df = table[0]
+            return df['Symbol'].tolist()
+        except Exception as e:
+            logger.error(f"Failed to fetch S&P 500 list: {e}")
+            return []
+
     def fetch_data(self):
         """
         Downloads historical data. If the internet is slow, go grab a coffee.
         """
         logger.info(f"Fetching data for {len(self.tickers)} tickers from {self.start_date} to {self.end_date}...")
         try:
-            # Fetch adjusted close prices
-            raw_data = yf.download(self.tickers, start=self.start_date, end=self.end_date)['Adj Close']
+            # Fetch prices. Using auto_adjust=True often simplifies things.
+            raw_data = yf.download(self.tickers, start=self.start_date, end=self.end_date, progress=False)
             
-            # Drop columns with too many missing values because we can't do math on 'NaN'
-            self.data = raw_data.dropna(axis=1, thresh=int(len(raw_data) * 0.9))
+            # yfinance column structure can be annoying. Let's try to find 'Adj Close' or 'Close'.
+            if 'Adj Close' in raw_data.columns:
+                self.data = raw_data['Adj Close']
+            elif 'Close' in raw_data.columns:
+                self.data = raw_data['Close']
+            else:
+                # If it's a single ticker, it might not be a MultiIndex
+                if isinstance(raw_data, pd.DataFrame):
+                    self.data = raw_data
+                else:
+                    raise ValueError("Could not find price data in yfinance response.")
+            
+            # Drop columns with too many missing values
+            self.data = self.data.dropna(axis=1, thresh=int(len(raw_data) * 0.9))
             self.data = self.data.ffill().dropna()
             
             logger.info(f"Successfully fetched data for {self.data.shape[1]} tickers.")
