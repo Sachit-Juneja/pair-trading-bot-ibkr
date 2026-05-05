@@ -1,0 +1,15 @@
+execution:
+  max_position_size: 0.1
+  stop_loss_std: 4.0
+  z_score_entry: 2.0
+  z_score_exit: 0.5
+ibkr:
+  client_id: 1
+  host: 127.0.0.1
+  port: 7497
+research:
+  universe: 'SP500'
+  start_date: '2022-01-01'
+  pca_components: 10
+  dbscan_eps: 1.5
+  db_path: 'sqlite:///pairs_trading.db'

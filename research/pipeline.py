@@ -34,7 +34,10 @@ def run_research_pipeline():
         logger.error("No data, no pairs, no money. Fix your internet.")
         return
 
-    clusters = selector.get_cluster_pairs()
+    clusters = selector.get_cluster_pairs(
+        n_components=res_conf.get('pca_components', 10),
+        eps=res_conf.get('dbscan_eps', 1.5)
+    )
     
     # 2. Cointegration Analysis
     analyzer = CointegrationAnalyzer()

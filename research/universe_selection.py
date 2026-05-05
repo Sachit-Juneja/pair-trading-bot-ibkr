@@ -126,11 +126,11 @@ class UniverseSelector:
         logger.info(f"PCA complete. Explained variance ratio sum: {np.sum(pca.explained_variance_ratio_):.4f}")
         return pca_features, scaler
 
-    def cluster_assets(self, eps=0.5, min_samples=2):
+    def cluster_assets(self, n_components=10, eps=1.5, min_samples=2):
         """
         Groups similar assets together. Like high school, but for stocks.
         """
-        features, _ = self.apply_pca()
+        features, _ = self.apply_pca(n_components=n_components)
         
         # DBSCAN doesn't require a pre-defined number of clusters. It finds them itself.
         clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(features)
@@ -142,12 +142,12 @@ class UniverseSelector:
         logger.info(f"Clustering complete. Found {n_clusters} clusters and {n_noise} noise points.")
         return self.clusters
 
-    def get_cluster_pairs(self):
+    def get_cluster_pairs(self, n_components=10, eps=1.5):
         """
         Returns a list of potential pairs grouped by cluster.
         """
         if self.clusters is None:
-            self.cluster_assets()
+            self.cluster_assets(n_components=n_components, eps=eps)
             
         cluster_groups = {}
         for ticker, cluster_id in self.clusters.items():
